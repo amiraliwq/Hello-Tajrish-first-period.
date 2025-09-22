@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+<meta charset="UTF-8">
+<title>سیستم حضور و غیاب پیشرفته</title>
+<style>
+body { font-family:'Tahoma', sans-serif; background:#E3F2FD; margin:0; padding:0; }
+header { background:#1E88E5; color:white; padding:20px; text-align:center; }
+.container { max-width: 1000px; margin: 20px auto; background:white; padding:20px; border-radius:10px; }
+h2 { color:#0D47A1; }
+button { margin:2px; padding:5px 10px; border:none; border-radius:4px; cursor:pointer; }
+.present { background:#4CAF50; color:white; }
+.absent { background:#EF5350; color:white; }
+.plus { background:#C8E6C9; }
+.minus { background:#FFCDD2; }
+.tableRow { display:flex; justify-content:space-between; align-items:center; padding:5px; border-bottom:1px solid #ccc; }
+.tableHeader { font-weight:bold; background:#BBDEFB; padding:5px; display:flex; justify-content:space-between; }
+input[type=number] { width:80px; }
+.searchBox { margin:10px 0; padding:5px; width:200px; }
+.optionButton { margin:0 2px; padding:2px 5px; }
+</style>
+</head>
+<body>
+<header>
+<h1>سلام تجریش</h1>
+<h3>سیستم حضور و غیاب پیشرفته</h3>
+</header>
+
+<div class="container" id="mainContainer">
+
+<!-- Login -->
+<div id="loginCard">
+<h2>ورود دبیر</h2>
+<label>نام کاربری:</label>
+<input type="text" id="username">
+<label>رمز عبور:</label>
+<input type="password" id="password">
+<button onclick="login()">ورود</button>
+<p>کاربران: اقابابا/2323 — نادی حق/3434</p>
+</div>
+
+<!-- Class selection -->
+<div id="classCard" style="display:none;">
+<h2>انتخاب کلاس</h2>
+<div id="classButtons"></div>
+<button onclick="logout()">خروج از حساب</button>
+</div>
+
+<!-- Attendance -->
+<div id="attendanceCard" style="display:none;">
+<h2 id="classTitle"></h2>
+<input type="text" id="searchInput" class="searchBox" placeholder="جستجو نام دانش‌آموز..." onkeyup="filterRows()">
+<div id="attendanceTable"></div>
+<div style="margin-top:10px;">
+<button onclick="quickQuestion()">پرسش سریع</button>
+<button onclick="saveSession()">ثبت جلسه</button>
+<button onclick="downloadCSV()">دانلود CSV</button>
+<button onclick="showLiveReport()">کارنامه لحظه‌ای</button>
+<button onclick="backToClasses()">بازگشت</button>
+</div>
+</div>
+
+<!-- Live report -->
+<div id="reportCard" style="display:none;">
+<h2>کارنامه لحظه‌ای</h2>
+<pre id="reportContent"></pre>
+<button onclick="closeReport()">بستن</button>
+</div>
+
+<script>
+const TEACHERS = {
+  "اقابابا": {password:"2323", name:"اقابابا", subject:"شیمی و فیزیک"},
+  "نادی حق": {password:"3434", name:"نادی حق", subject:"هندسه"}
+};
+const CLASSES = {
+  "میرزاخانی 1": ["امیرغعلی","امیرحسی"],
+  "میرزاخانی 2": ["شروین","آرتین"]
+};
+
+// Sessions: ذخیره در localStorage
+let sessions = JSON.parse(localStorage.getItem('sessions') || '[]');
+
+let currentTeacher = null;
+let currentClass = null;
+
+// Login
+function login(){
+  const u=document.getElementById('username').value;
+  const p=document.getElementById('password').value;
+  if(TEACHERS[u] && TEACHERS[u].password===p){
+    currentTeacher=TEACHERS[u];
+    document.getElementById('loginCard').style.display='none';
+    showClassSelection();
+  } else alert('نام کاربری یا رمز اشتباه است');
+}
+
+// Class selection
+function showClassSelection(){
+  const div=document.getElementById('classButtons');
+  div.innerHTML='';
+  for(const cls in CLASSES){
+    let btn=document.createElement('button'); btn.innerText=cls;
+    btn.onclick=()=>showAttendance(cls);
+    div.appendChild(btn);
+  }
+  document.getElementById('classCard').style.display='block';
+}
+
+// Attendance page
+function showAttendance(cls){
+  currentClass=cls;
+  document.getElementById('classCard').style.display='none';
+  document.getElementById('attendanceCard').style.display='block';
+  document.getElementById('classTitle').innerText='حضور و غیاب — '+cls;
+  renderTable();
+}
+
+// Render table
+function renderTable(){
+  const table=document.getElementById('attendanceTable'); table.innerHTML='';
+  // Header
+  let hdr=document.createElement('div'); hdr.className='tableHeader';
+  ["نام","وضعیت","+","-","نمره"].forEach(t=>{ let d=document.createElement('div'); d.style.width='100px'; d.innerText=t; hdr.appendChild(d); });
+  table.appendChild(hdr);
+
+  CLASSES[currentClass].forEach(student=>{
+    let row=document.createElement('div'); row.className='tableRow'; row.dataset.student=student;
+    // Name
+    let name=document.createElement('div'); name.style.width='100px'; name.innerText=student;
+    // Status
+    let status=document.createElement('div'); status.style.width='100px'; status.innerText='غایب';
+    let btnPresent=document.createElement('button'); btnPresent.className='present optionButton'; btnPresent.innerText='حاضر'; btnPresent.onclick=()=>status.innerText='حاضر';
+    let btnAbsent=document.createElement('button'); btnAbsent.className='absent optionButton'; btnAbsent.innerText='غایب'; btnAbsent.onclick=()=>status.innerText='غایب';
+    status.appendChild(btnPresent); status.appendChild(btnAbsent);
+    // Plus
+    let plus=document.createElement('div'); plus.style.width='50px'; let plusVal=0;
+    let btnPlus=document.createElement('button'); btnPlus.className='plus optionButton'; btnPlus.innerText='+'; btnPlus.onclick=()=>{ plusVal++; plusNum.innerText=plusVal; };
+    let plusNum=document.createElement('span'); plusNum.innerText=plusVal; plus.appendChild(btnPlus); plus.appendChild(plusNum);
+    // Minus
+    let minus=document.createElement('div'); minus.style.width='50px'; let minusVal=0;
+    let btnMinus=document.createElement('button'); btnMinus.className='minus optionButton'; btnMinus.innerText='-'; btnMinus.onclick=()=>{ minusVal++; minusNum.innerText=minusVal; };
+    let minusNum=document.createElement('span'); minusNum.innerText=minusVal; minus.appendChild(btnMinus); minus.appendChild(minusNum);
+    // Score
+    let score=document.createElement('input'); score.type='number'; score.min=0; score.max=20;
+    row.appendChild(name); row.appendChild(status); row.appendChild(plus); row.appendChild(minus); row.appendChild(score);
+    table.appendChild(row);
+  });
+}
+
+// Save session
+function saveSession(){
+  const rows=document.querySelectorAll('#attendanceTable .tableRow');
+  const now=new Date().toISOString();
+  rows.forEach(r=>{
+    const student=r.dataset.student;
+    const status=r.children[1].childNodes[0].nodeValue || r.children[1].innerText.split('حاضر')[0].split('غایب')[0] || 'غایب';
+    const plus=parseInt(r.children[2].childNodes[1].innerText)||0;
+    const minus=parseInt(r.children[3].childNodes[1].innerText)||0;
+    const score=parseFloat(r.children[4].value)||null;
+    sessions.push({datetime:now, teacher:currentTeacher.name, subject:currentTeacher.subject, class:currentClass, student, status, plus, minus, score});
+  });
+  localStorage.setItem('sessions', JSON.stringify(sessions));
+  alert('جلسه ثبت شد!');
+}
+
+// Download CSV
+function downloadCSV(){
+  let csv='datetime,teacher,subject,class,student,status,plus,minus,score\n';
+  sessions.forEach(s=>{
+    csv+=`${s.datetime},${s.teacher},${s.subject},${s.class},${s.student},${s.status},${s.plus},${s.minus},${s.score||''}\n`;
+  });
+  const blob=new Blob([csv],{type:'text/csv'});
+  const link=document.createElement('a'); link.href=URL.createObjectURL(blob); link.download='sessions.csv'; link.click();
+}
+
+// Live report
+function showLiveReport(){
+  const reportDiv=document.getElementById('reportCard'); const reportContent=document.getElementById('reportContent');
+  reportContent.innerText=''; reportDiv.style.display='block';
+  const agg={};
+  sessions.forEach(s=>{
+    if(!agg[s.class]) agg[s.class]={};
+    if(!agg[s.class][s.student]) agg[s.class][s.student]={present:0,absent:0,plus:0,minus:0,scores:[]};
+    let st=agg[s.class][s.student];
+    if(s.status==='حاضر') st.present++; else st.absent++;
+    st.plus+=s.plus; st.minus+=s.minus;
+    if(s.score!==null) st.scores.push(s.score);
+  });
+  for(const cls in agg){
+    reportContent.innerText+=`کلاس: ${cls}\n`;
+    for(const stu in agg[cls]){
+      const st=agg[cls][stu]; const avg=st.scores.length>0?(st.scores.reduce((a,b)=>a+b,0)/st.scores.length).toFixed(2):'-';
+      reportContent.innerText+=`  - ${stu} | حضور:${st.present} | غیاب:${st.absent} | +:${st.plus} | -:${st.minus} | میانگین:${avg}\n`;
+    }
+    reportContent.innerText+='--------------------------------------------------\n';
+  }
+}
+
+// Quick question
+function quickQuestion(){
+  const students=CLASSES[currentClass];
+  const stu=prompt('نام دانش‌آموز برای پرسش سریع:', students[0]);
+  if(!stu || !students.includes(stu)) return alert('دانش‌آموز موجود نیست');
+  const action=prompt('عملیات: 1=اضافه +, 2=اضافه -, 3=ثبت نمره');
+  const row=[...document.querySelectorAll('#attendanceTable .tableRow')].find(r=>r.dataset.student===stu);
+  if(!row) return;
+  if(action==='1'){ row.children[2].childNodes[1].innerText=parseInt(row.children[2].childNodes[1].innerText)+1; }
+  else if(action==='2'){ row.children[3].childNodes[1].innerText=parseInt(row.children[3].childNodes[1].innerText)+1; }
+  else if(action==='3'){ const sc=prompt('نمره:'); if(sc!==null) row.children[4].value=sc; }
+}
+
+// Filter rows
+function filterRows(){
+  const q=document.getElementById('searchInput').value.trim();
+  document.querySelectorAll('#attendanceTable .tableRow').forEach(r=>{
+    if(q===''||r.dataset.student.includes(q)) r.style.display='flex';
+    else r.style.display='none';
+  });
+}
+
+// Navigation
+function backToClasses(){ document.getElementById('attendanceCard').style.display='none'; showClassSelection(); }
+function closeReport(){ document.getElementById('reportCard').style.display='none'; }
+function logout(){ location.reload(); }
+
+</script>
+</body>
+</html>
